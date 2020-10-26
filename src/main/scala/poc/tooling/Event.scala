@@ -8,6 +8,7 @@ import java.time.ZonedDateTime
 case class Event[A](
     id: AggregateId,
     seqNum: SeqNum,
+    version: Version,
     aggregateType: String,
     eventType: String,
     payload: A,
@@ -31,8 +32,6 @@ object Event {
     ): Eval[B] = f(fa.payload, lb)
 
   }
-
-  implicit val seqNumDecoder = deriveDecoder[SeqNum]
 
   implicit def eventDecoder[A](implicit
       encoder: Decoder[A]

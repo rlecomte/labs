@@ -41,6 +41,14 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
 
+libraryDependencies ++= Seq(
+  // Start with this one
+  "org.tpolecat" %% "doobie-core" % "0.9.0",
+  // And add any of these as needed
+  "org.tpolecat" %% "doobie-hikari" % "0.9.0", // HikariCP transactor.
+  "org.tpolecat" %% "doobie-postgres" % "0.9.0", // Postgres driver 42.2.12 + type mappings.
+  "org.tpolecat" %% "doobie-postgres-circe" % "0.9.0"
+)
 scalacOptions ++= Seq(
   "-Xfatal-warnings" // New lines for each options
 )
