@@ -22,8 +22,9 @@ trait Store[F[_]] {
   def getAll(seqNum: Long, eventTypes: Seq[String]): fs2.Stream[F, Event[Json]]
 
   def register[A](
-      event: List[NewEvent[A]],
-      consistencyVersion: Option[SeqNum] = None
+      id: AggregateId,
+      version: Option[Version],
+      events: List[NewEvent[A]]
   )(implicit
       encoder: Encoder[A]
   ): F[Boolean]

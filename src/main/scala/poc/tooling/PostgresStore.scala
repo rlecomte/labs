@@ -28,9 +28,13 @@ class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
       eventTypes: Seq[String]
   ): fs2.Stream[F, Event[Json]] = ???
 
-  def register[A](event: List[NewEvent[A]], consistencyVersion: Option[SeqNum])(
-      implicit encoder: Encoder[A]
-  ): F[Boolean] = ???
+  def register[A](
+      id: AggregateId,
+      version: Option[Version],
+      events: List[NewEvent[A]]
+  )(implicit
+      encoder: Encoder[A]
+  ): F[Boolean] = PostgresStore.insertEvents(id, version, events)
 }
 
 object PostgresStore {
@@ -78,18 +82,18 @@ object PostgresStore {
 
   def insertEvents[A](
       id: AggregateId,
-      version: Version,
-      newEvents: NonEmptyList[NewEvent[A]]
+      version: Option[Version],
+      newEvents: List[NewEvent[A]]
   )(implicit encoder: Encoder[A]) = {
     val F = Sync[ConnectionIO]
 
-    val newVersion = Version(version.value + 1)
+    val newVersion = Version(version.map(_.value).getOrElse(1L) + 1L)
 
     val getCurrentVersion =
       sql"""SELECT version 
               FROM events 
               WHERE stream_id=$id
-        """.query[Version].unique
+        """.query[Version].option
 
     val insertEventsSql: String = """
       INSERT INTO (stream_id, 
@@ -110,7 +114,7 @@ object PostgresStore {
         e.metadata,
         newVersion
       )
-    }.toList
+    }
 
     val insertEvents: ConnectionIO[Int] =
       Update[(AggregateId, String, String, Json, EventMetadata, Version)](
