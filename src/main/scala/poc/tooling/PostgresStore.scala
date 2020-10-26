@@ -68,7 +68,7 @@ object PostgresStore {
     sql"""
       SELECT stream_id, seq_num, version, aggregate_type, event_type, payload, metadata, created_at
       FROM events
-      WHERE stream_id=$id 
+      WHERE stream_id=$id
       ORDER BY seq_num ASC
     """
       .query[Event[Json]]
@@ -90,21 +90,21 @@ object PostgresStore {
   )(implicit encoder: Encoder[A]) = {
     val F = Sync[ConnectionIO]
 
-    val newVersion = Version(version.map(_.value).getOrElse(1L) + 1L)
+    val newVersion = Version(version.map(_.value).getOrElse(0L) + 1L)
 
     val getCurrentVersion =
-      sql"""SELECT version 
-              FROM events 
+      sql"""SELECT version
+              FROM streams
               WHERE stream_id=$id
         """.query[Version].option
 
     val insertEventsSql: String = """
-      INSERT INTO (stream_id, 
-                   aggregate_type, 
-                   event_type, 
-                   payload, 
-                   metadata, 
-                   version) 
+      INSERT INTO events(stream_id,
+                         aggregate_type,
+                         event_type,
+                         payload,
+                         metadata,
+                         version)
       VALUES (?, ?, ?, ?, ?, ?)
     """
 
@@ -125,9 +125,8 @@ object PostgresStore {
       ).updateMany(tuples)
 
     val insertNewVersion = sql"""
-        INSERT INTO events (version) 
-        VALUES ($newVersion)
-        WHERE stream_id=$id
+        INSERT INTO streams(stream_id, version)
+        VALUES ($id, $newVersion)
     """.update.run
 
     for {
@@ -135,7 +134,7 @@ object PostgresStore {
       isSameVersion = currentVersion == version
       _ <-
         if (isSameVersion) {
-          insertEvents >> insertNewVersion
+          insertNewVersion >> insertEvents
         } else {
           F.pure(())
         }
