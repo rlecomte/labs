@@ -20,26 +20,28 @@ import _root_.poc.domain.CustomEnum.CustomEnumEventPayload
 
 object Main extends IOApp {
 
-  val xa = Transactor.fromDriverManager[IO](
+  import cats.mtl._
+  type Eff[A] = EitherT[IO, AppError, A]
+
+  val xa = Transactor.fromDriverManager[Eff](
     "org.postgresql.Driver",
     "jdbc:postgresql://localhost:5434/postgres",
     "postgres",
     "trololo"
   )
 
-  import cats.mtl._
-  type Eff[A] = EitherT[IO, AppError, A]
-  val result: IO[Either[AppError, Unit]] =
-    CustomEnumAlg.createEnum[Eff](null).compile.drain.value
+  val createEvents: IO[Either[AppError, Unit]] =
+    CustomEnumAlg.createEnum[Eff](new PostgresStore(xa)).compile.drain.value
 
   def run(args: List[String]): IO[ExitCode] = {
-    new PostgresStore(xa)
-      .getAggregateEvents[CustomEnumEventPayload](
-        AggregateId(ju.UUID.randomUUID())
-      )
-      .compile
-      .drain
-      .map(_ => ExitCode.Success)
+    createEvents.map(_ => ExitCode.Success)
+    //new PostgresStore(xa)
+    //  .getAggregateEvents[CustomEnumEventPayload](
+    //    AggregateId(ju.UUID.randomUUID())
+    //  )
+    //  .compile
+    //  .drain
+    //  .map(_ => ExitCode.Success)
 
     //fs2
     //  .Stream(1, 2, 3)
@@ -50,6 +52,4 @@ object Main extends IOApp {
     //  .drain
     //  .map(_ => ExitCode.Success)
   }
-
-  object CustomEnumController {}
 }
