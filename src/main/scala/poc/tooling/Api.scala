@@ -18,19 +18,23 @@ object Api {
   ): fs2.Stream[F, Unit] = {
     store
       .getAggregateEvents[E](aggregateId)
-      .evalMapAccumulate[F, Option[S], SeqNum](Option.empty[S]) { (s, e) =>
+      .evalMapAccumulate[F, Option[S], Version](Option.empty[S]) { (s, e) =>
         plan
           .stateBuilder(s, e)
-          .fold(E.raise(_), s => F.pure((s, e.seqNum)))
+          .fold(E.raise(_), s => F.pure((s, e.version)))
       }
       .last
+      .map {
+        case Some((state, lastVersion)) =>
+          (state, Some(lastVersion)) // an aggregate already exist
+        case None => (None, None) //no trace of the aggregateId in the store
+      }
       .evalMap[F, Unit] {
-        case Some((state, lastEventNum)) =>
+        case (state, lastVersion) =>
           for {
             newEvents <- plan.commandProcessor(state, command)
-            result <- store.register(newEvents, Some(lastEventNum))
+            result <- store.register(aggregateId, lastVersion, newEvents)
           } yield if (result) F.pure(()) else E.raise(UnconsistentState)
-        case None => E.raise(AggregateNotFound)
       }
   }
 }

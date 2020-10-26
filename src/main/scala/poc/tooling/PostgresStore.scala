@@ -20,8 +20,9 @@ class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
 
   def getAggregateEvents[A](id: AggregateId)(implicit
       decoder: Decoder[A]
-  ): fs2.Stream[F, Event[A]] =
+  ): fs2.Stream[F, Event[A]] = {
     PostgresStore.selectAggregateEvents(id).transact(transactor)
+  }
 
   def getAll(
       seqNum: Long,
@@ -34,7 +35,9 @@ class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
       events: List[NewEvent[A]]
   )(implicit
       encoder: Encoder[A]
-  ): F[Boolean] = PostgresStore.insertEvents(id, version, events)
+  ): F[Boolean] = {
+    PostgresStore.insertEvents(id, version, events).transact(transactor)
+  }
 }
 
 object PostgresStore {
