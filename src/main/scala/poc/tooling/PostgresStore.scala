@@ -24,10 +24,18 @@ class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
     PostgresStore.selectAggregateEvents(id).transact(transactor)
   }
 
-  def getAll(
-      seqNum: Long,
-      eventTypes: Seq[String]
-  ): fs2.Stream[F, Event[Json]] = ???
+  def getAggregateEventFromVersion[A](id: AggregateId, version: Version)(
+      implicit decoder: Decoder[A]
+  ): F[Option[Event[A]]] = {
+    PostgresStore.selectEventFromVersion(id, version).transact(transactor)
+  }
+
+  def getAll[A](
+      seqNum: SeqNum,
+      eventTypes: List[String]
+  )(implicit encoder: Decoder[A]): fs2.Stream[F, Event[A]] = {
+    PostgresStore.selectAllEvents(seqNum, eventTypes).transact(transactor)
+  }
 
   def register[A](
       id: AggregateId,
@@ -90,7 +98,7 @@ object PostgresStore {
   )(implicit encoder: Encoder[A]) = {
     val F = Sync[ConnectionIO]
 
-    val newVersion = Version(version.map(_.value).getOrElse(0L) + 1L)
+    val newVersion = version.map(_.inc()).getOrElse(Version.init)
 
     val getCurrentVersion =
       sql"""SELECT version
@@ -139,5 +147,52 @@ object PostgresStore {
           F.pure(())
         }
     } yield isSameVersion
+  }
+
+  def selectAllEvents[A](
+      seqNum: SeqNum,
+      eventTypes: List[String]
+  )(implicit decoder: Decoder[A]): fs2.Stream[ConnectionIO, Event[A]] = {
+    val F = Sync[ConnectionIO]
+
+    sql"""
+      SELECT stream_id, seq_num, version, aggregate_type, event-type, payload, metadata, created_at
+      FROM events
+      WHERE seq_num > $seqNum AND event_type IN $eventTypes
+    """
+      .query[Event[Json]]
+      .stream
+      .evalMap[ConnectionIO, Event[A]] {
+        case e =>
+          e.traverse[Decoder.Result, A](_.as[A])
+            .fold(
+              err => F.raiseError(UnexpectedError(err.toString)),
+              F.pure(_)
+            )
+      }
+  }
+
+  def selectEventFromVersion[A](
+      id: AggregateId,
+      version: Version
+  )(implicit decoder: Decoder[A]): ConnectionIO[Option[Event[A]]] = {
+    val F = Sync[ConnectionIO]
+
+    sql"""
+      SELECT stream_id, seq_num, version, aggregate_type, event-type, payload, metadata, created_at
+      FROM events
+      WHERE version = $version AND stream_id = $id
+    """
+      .query[Event[Json]]
+      .option
+      .flatMap {
+        case Some(e) =>
+          e.traverse[Decoder.Result, A](_.as[A])
+            .fold(
+              err => F.raiseError(UnexpectedError(err.toString)),
+              v => F.pure(Some(v))
+            )
+        case None => F.pure(None)
+      }
   }
 }

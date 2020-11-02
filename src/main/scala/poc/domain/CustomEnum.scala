@@ -14,12 +14,15 @@ import io.circe.syntax._
 
 import poc.tooling._
 
+sealed trait EnumType
+case class MandatoryEnum(defaultValue: String) extends EnumType
+case class OptionalEnum(defaultValue: Option[String]) extends EnumType
 case class CustomEnum(
     id: AggregateId,
     label: String,
     description: String,
     choices: NonEmptyList[String],
-    defaultValue: Option[String],
+    enumType: EnumType,
     deleted: Boolean = false
 )
 
@@ -33,12 +36,20 @@ object CustomEnum {
   val customEnumPinnedEventType = "custom-enum-pinned-event-type"
   val customEnumUnpinnedEventType = "custom-enum-unpinned-event-type"
 
+  val eventTypeList = List(
+    customEnumCreatedEventType,
+    customEnumChoicesAddedEventType,
+    customEnumDeletedEventType,
+    customEnumPinnedEventType,
+    customEnumUnpinnedEventType
+  )
+
   sealed trait CustomEnumEventPayload
   case class CustomEnumCreated(
       label: String,
       description: String,
       choices: NonEmptyList[String],
-      defaultValue: Option[String]
+      enumType: EnumType
   ) extends CustomEnumEventPayload
   case class CustomEnumChoicesAdded(choices: NonEmptyList[String])
       extends CustomEnumEventPayload
@@ -72,6 +83,7 @@ object CustomEnum {
       label: String,
       description: String,
       choices: NonEmptyList[String],
+      mandatory: Boolean,
       defaultValue: Option[String]
   ) extends CustomEnumCommand
   case class AddChoicesCommand(

@@ -2,7 +2,9 @@ package poc.tooling
 
 import io.circe._, io.circe.generic.semiauto._
 
-case class SeqNum(value: Long) extends AnyVal
+case class SeqNum(value: Long) extends AnyVal {
+  def inc(): SeqNum = SeqNum(value + 1)
+}
 
 object SeqNum {
   val init = SeqNum(0)

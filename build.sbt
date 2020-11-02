@@ -50,7 +50,9 @@ libraryDependencies ++= Seq(
   "org.tpolecat" %% "doobie-postgres-circe" % "0.9.0"
 )
 scalacOptions ++= Seq(
-  "-Xfatal-warnings" // New lines for each options
+  "-Xfatal-warnings", // New lines for each options
+  "-unchecked",
+  "-deprecation"
 )
 
 // Here, `libraryDependencies` is a set of dependencies, and by using `+=`,

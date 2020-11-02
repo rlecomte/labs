@@ -10,102 +10,117 @@ import poc.tooling._
 object CustomEnumAlg {
   import CustomEnum._
 
-  def aggregateActionPlan[F[_]](implicit
+  def commandHandler[F[_]](implicit
       F: Applicative[F],
       E: RaiseError[F]
-  ) =
-    AggregateActionPlan(stateBuilder, commandProcessor[F])
-
-  def commandProcessor[F[_]](implicit
-      F: Applicative[F],
-      E: RaiseError[F]
-  ): CommandProcessor[
+  ): CommandHandler[
     F,
     CustomEnumCommand,
     CustomEnum,
     CustomEnumEventPayload
   ] =
-    Kleisli {
-      case (state, cmd) =>
-        (state, cmd) match {
-          case (Some(s), _) if s.deleted =>
-            E.raise(
-              CommandRefused("custom enum deleted, can't apply command.")
-            )
+    Commands.handle[F] {
+      case (Some(s), _) if s.deleted =>
+        E.raise(
+          CommandRefused("custom enum deleted, can't apply command.")
+        )
 
-          case (None, CreateCommand(id, label, desc, choices, defaultValue)) =>
-            F.pure(
-              List(
-                NewEvent(
-                  id = id,
-                  aggregateType = customEnumAggregateType,
-                  eventType = customEnumCreatedEventType,
-                  payload = CustomEnumCreated(
-                    label,
-                    desc,
-                    choices,
-                    defaultValue
-                  )
+      case (
+            None,
+            CreateCommand(id, label, desc, choices, mandatory, defaultValue)
+          ) =>
+        for {
+          enumType <- defaultValue match {
+            case Some(v) =>
+              if (choices.contains_(v)) {
+                E.raise(
+                  CommandRefused("Default value should be a valid enum value.")
                 )
-              )
+              } else {
+                if (mandatory) {
+                  F.pure(MandatoryEnum(v))
+                } else {
+                  F.pure(OptionalEnum(defaultValue))
+                }
+              }
+            case None =>
+              if (mandatory) {
+                E.raise(
+                  CommandRefused("Mandatory tag should have a default value.")
+                )
+              } else {
+                F.pure(OptionalEnum(None))
+              }
+          }
+        } yield List(
+          NewEvent(
+            id = id,
+            aggregateType = customEnumAggregateType,
+            eventType = customEnumCreatedEventType,
+            payload = CustomEnumCreated(
+              label,
+              desc,
+              choices,
+              enumType
             )
+          )
+        )
 
-          case (Some(s), AddChoicesCommand(id, newChoices)) =>
-            F.pure(
-              List(
-                NewEvent(
-                  id = id,
-                  aggregateType = customEnumAggregateType,
-                  eventType = customEnumChoicesAddedEventType,
-                  payload = CustomEnumChoicesAdded(newChoices)
-                )
-              )
+      case (Some(s), AddChoicesCommand(id, newChoices)) =>
+        F.pure(
+          List(
+            NewEvent(
+              id = id,
+              aggregateType = customEnumAggregateType,
+              eventType = customEnumChoicesAddedEventType,
+              payload = CustomEnumChoicesAdded(newChoices)
             )
+          )
+        )
 
-          case (Some(_), PinCommand(id, datasetId, value)) =>
-            F.pure(
-              List(
-                NewEvent(
-                  id = id,
-                  aggregateType = customEnumAggregateType,
-                  eventType = customEnumPinnedEventType,
-                  CustomEnumPinned(datasetId = datasetId, value = value)
-                )
-              )
+      case (Some(_), PinCommand(id, datasetId, value)) =>
+        F.pure(
+          List(
+            NewEvent(
+              id = id,
+              aggregateType = customEnumAggregateType,
+              eventType = customEnumPinnedEventType,
+              CustomEnumPinned(datasetId = datasetId, value = value)
             )
-          case (Some(_), UnpinCommand(id, datasetId)) =>
-            F.pure(
-              List(
-                NewEvent(
-                  id = id,
-                  aggregateType = customEnumAggregateType,
-                  eventType = customEnumUnpinnedEventType,
-                  CustomEnumUnpinned(datasetId = datasetId)
-                )
-              )
+          )
+        )
+      case (Some(_), UnpinCommand(id, datasetId)) =>
+        F.pure(
+          List(
+            NewEvent(
+              id = id,
+              aggregateType = customEnumAggregateType,
+              eventType = customEnumUnpinnedEventType,
+              CustomEnumUnpinned(datasetId = datasetId)
             )
+          )
+        )
 
-          case (Some(_), DeleteCommand(id)) =>
-            F.pure(
-              List(
-                NewEvent(
-                  id = id,
-                  aggregateType = customEnumAggregateType,
-                  eventType = customEnumDeletedEventType,
-                  CustomEnumDeleted()
-                )
-              )
+      case (Some(_), DeleteCommand(id)) =>
+        F.pure(
+          List(
+            NewEvent(
+              id = id,
+              aggregateType = customEnumAggregateType,
+              eventType = customEnumDeletedEventType,
+              CustomEnumDeleted()
             )
+          )
+        )
 
-          case (_, _) =>
-            E.raise(
-              CommandRefused("Can't apply the command on the current state.")
-            )
-        }
+      case (_, _) =>
+        E.raise(
+          CommandRefused("Can't apply the command on the current state.")
+        )
     }
 
   val stateBuilder: StateBuilder[CustomEnum, CustomEnumEventPayload] =
-    Kleisli {
+    States.of {
       case (state, event) =>
         (state, event.payload) match {
           case (None, CustomEnumCreated(label, descr, choices, defaultValue)) =>
@@ -140,12 +155,13 @@ object CustomEnumAlg {
         label = "foo",
         description = "bar",
         choices = NonEmptyList.of("blue pill", "red pill"),
-        defaultValue = None
+        defaultValue = Some("blue pill"),
+        mandatory = true
       )
       _ <- Api.applyCommand(store)(
-        aggregateId,
         command,
-        aggregateActionPlan
+        stateBuilder,
+        commandHandler
       )
     } yield ()
   }

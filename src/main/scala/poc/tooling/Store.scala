@@ -19,7 +19,14 @@ trait Store[F[_]] {
       id: AggregateId
   )(implicit decoder: Decoder[A]): fs2.Stream[F, Event[A]]
 
-  def getAll(seqNum: Long, eventTypes: Seq[String]): fs2.Stream[F, Event[Json]]
+  def getAggregateEventFromVersion[A](id: AggregateId, version: Version)(
+      implicit decoder: Decoder[A]
+  ): F[Option[Event[A]]]
+
+  def getAll[A](
+      seqNum: SeqNum,
+      eventTypes: List[String]
+  )(implicit decoder: Decoder[A]): fs2.Stream[F, Event[A]]
 
   def register[A](
       id: AggregateId,
