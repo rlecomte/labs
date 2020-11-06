@@ -14,7 +14,6 @@ import doobie.implicits._
 import doobie.syntax.ConnectionIOOps
 import doobie.util.transactor.Transactor
 import cats.data.NonEmptyList
-import cats.Applicative
 
 class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
 

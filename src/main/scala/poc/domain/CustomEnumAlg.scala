@@ -6,6 +6,9 @@ import cats.data.{NonEmptyList, Kleisli}
 import cats.implicits._
 import cats.effect.Sync
 import poc.tooling._
+import cats.effect.LiftIO
+import cats.effect.IO
+import cats.Monad
 
 object CustomEnumAlg {
   import CustomEnum._
@@ -32,7 +35,7 @@ object CustomEnumAlg {
         for {
           enumType <- defaultValue match {
             case Some(v) =>
-              if (choices.contains_(v)) {
+              if (!choices.contains_(v)) {
                 E.raise(
                   CommandRefused("Default value should be a valid enum value.")
                 )
@@ -145,11 +148,12 @@ object CustomEnumAlg {
   def createEnum[F[_]](
       store: Store[F]
   )(implicit
-      F: Sync[F],
+      F: LiftIO[F],
+      A: Monad[F],
       E: RaiseError[F]
   ): fs2.Stream[F, Unit] = {
     for {
-      aggregateId <- fs2.Stream.eval(AggregateId.newAggregateId[F])
+      aggregateId <- fs2.Stream.eval(F.liftIO(AggregateId.newAggregateId[IO]))
       command = CreateCommand(
         aggregateId = aggregateId,
         label = "foo",
@@ -165,8 +169,6 @@ object CustomEnumAlg {
       )
     } yield ()
   }
-
-  def addChoices(): Unit = ()
 
   def deleteEnum(): Unit = ()
 

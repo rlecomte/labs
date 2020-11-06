@@ -29,6 +29,11 @@ libraryDependencies += "org.typelevel" %% "cats-effect" % "2.2.0"
 libraryDependencies += "co.fs2" %% "fs2-core" % "2.4.4" // For cats 2 and cats-effect 2
 libraryDependencies += "co.fs2" %% "fs2-io" % "2.4.4"
 libraryDependencies += "org.typelevel" %% "cats-mtl" % "1.0.0"
+libraryDependencies ++= Seq(
+  "io.chrisdavenport" %% "log4cats-core" % "1.1.1", // Only if you want to Support Any Backend
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.1.1", // Direct Slf4j Support - Recommended
+  "ch.qos.logback" % "logback-classic" % "1.2.3"
+)
 
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
 addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")

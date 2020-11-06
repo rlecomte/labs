@@ -18,74 +18,161 @@ import poc.domain.CustomEnum.CustomEnumPinned
 import poc.domain.CustomEnum.CustomEnumUnpinned
 import cats.effect.IO
 import cats.data.EitherT
+import scala.concurrent.duration.FiniteDuration
+import java.util.concurrent.TimeUnit
+import cats.effect.Timer
+import scala.concurrent.duration._
+import cats.~>
+import cats.mtl._
+import fs2.Stream
+import cats.data.OptionT
+import cats.Functor
 
 object DatasetProjection {
 
-  type Attributes = Map[String, String]
-  type State = Map[DatasetId, Attributes]
+  class LogAndThrowError[F[_], E <: Throwable](implicit F: Sync[F])
+      extends (EitherT[F, E, *] ~> F) {
 
-  sealed trait ProjectionError
-  case object CantRetrieveCreationEvent extends ProjectionError
-
-  import cats.mtl._
-  type Eff[A] = EitherT[IO, ProjectionError, A]
-  private def run(
-      store: Store[Eff],
-      state: Ref[Eff, (State, SeqNum)]
-  ) = {
-    Monad[fs2.Stream[Eff, ?]]
-      .iterateUntil(runProjection[Eff](store, state))(_.isEmpty)
+    def apply[A](fa: EitherT[F, E, A]): F[A] = {
+      fa.value.flatMap {
+        case Left(err) => F.delay(println(s"Error $err")) *> F.raiseError(err)
+        case Right(a)  => F.pure(a)
+      }
+    }
   }
 
-  // Stream[(State, SeqNum)]
-  // init (ref.get)
-  //
+  sealed trait ProjectionError extends Exception
+  case object CantRetrieveCreationEvent extends ProjectionError
 
-  private def runProjection[F[_]](
-      store: Store[F],
-      state: Ref[F, (State, SeqNum)]
+  sealed trait Op
+  case class AddMandatoryLabel(label: String, defaultValue: String) extends Op
+  case class DeleteLabel(label: String) extends Op
+  case class PinValue(datasetId: DatasetId, label: String, value: String)
+      extends Op
+  case class UnpinValue(datasetId: DatasetId, label: String) extends Op
+  case object Ignore extends Op
+
+  type Attributes = Map[String, String]
+  case class State(
+      mandatories: Attributes,
+      datasetAttributes: Map[DatasetId, Attributes]
+  ) {
+    def addMandatory(label: String, value: String): State = {
+      val mand = mandatories + ((label, value))
+      val attrs = datasetAttributes.view.mapValues { attr =>
+        attr + ((label, value))
+      }.toMap
+
+      State(mand, attrs)
+    }
+
+    def deleteLabel(label: String): State = {
+      val mand = mandatories - label
+      val attrs = datasetAttributes.view.mapValues { attr =>
+        attr - label
+      }.toMap
+
+      State(mand, attrs)
+    }
+
+    def pin(id: DatasetId, label: String, value: String): State = {
+      val attrs =
+        datasetAttributes.getOrElse(id, mandatories) + ((label, value))
+      State(mandatories, datasetAttributes + ((id, attrs)))
+    }
+
+    def unpin(id: DatasetId, label: String): State = {
+      val attrsOpt = datasetAttributes.get(id).map(attrs => attrs - label)
+      attrsOpt
+        .map(attrs => State(mandatories, datasetAttributes + ((id, attrs))))
+        .getOrElse(this)
+    }
+  }
+
+  def createStateRef = Ref[IO].of((State(Map(), Map()), SeqNum.init))
+
+  def run(
+      store: Store[IO],
+      state: Ref[IO, (State, SeqNum)]
+  )(implicit
+      timer: Timer[IO]
+  ): fs2.Stream[IO, Unit] = {
+    for {
+      _ <- Stream.every[IO](1.second)
+      currentState <- Stream.eval(state.get) // get the current projection state
+      newState <-
+        // read all unread events from the eventstore and apply it to the projection state
+        // As long as there is events to read, the stream will fetch and apply it to the projection.
+        Stream
+          .unfoldEval(currentState) {
+            case (s, pos) =>
+              getNextStateWithStreamPosition[EitherT[IO, ProjectionError, *]](
+                store.mapK(EitherT.liftK)
+              )(s, pos)
+                .translate(
+                  new LogAndThrowError[IO, ProjectionError]
+                ) // unlift IO from EitherT : print and throw error
+                .attempt // handle throwable to avoid killing process
+                .collect {
+                  case Right(v) => v
+                } // collect only successful value
+                .compile // compile stream to IO
+                .last // get only last element (the last state)
+                .map(r => r.zip(r))
+          }
+          .last
+      r <- newState match {
+        // if some : we have successfully read events from store and a new state is available : register it in our Ref
+        case Some(t @ (s, _)) => Stream.eval(state.set(t)).map(_ => s)
+        // elsewhere keep current projection state
+        case None => Stream.eval(IO.pure(currentState._1))
+      }
+    } yield ()
+  }
+
+  def getNextStateWithStreamPosition[F[_]](
+      store: Store[F]
+  )(state: State, position: SeqNum)(implicit
+      F: Monad[F],
+      R: Raise[F, ProjectionError]
+  ): fs2.Stream[F, (State, SeqNum)] = {
+    store
+      .getAll[CustomEnumEventPayload](
+        position,
+        CustomEnum.eventTypeList
+      )
+      .evalScan((state, position)) {
+        case ((s, _), e) =>
+          for {
+            op <- toOpAlgebra(store)(e)
+            nextPos = e.seqNum.inc()
+          } yield (applyOpOnState(s, op), nextPos)
+      }
+  }
+
+  private def applyOpOnState(state: State, op: Op): State = {
+    op match {
+      case AddMandatoryLabel(label, defaultValue) =>
+        state.addMandatory(label, defaultValue)
+      case DeleteLabel(label) =>
+        state.deleteLabel(label)
+      case PinValue(datasetId, label, value) =>
+        state.pin(datasetId, label, value)
+      case UnpinValue(datasetId, label) =>
+        state.unpin(datasetId, label)
+      case Ignore => state
+    }
+  }
+
+  private def toOpAlgebra[F[_]](store: Store[F])(
+      event: Event[CustomEnumEventPayload]
   )(implicit
       F: Monad[F],
       E: Raise[F, ProjectionError]
-  ): fs2.Stream[F, Option[SeqNum]] = {
-    for {
-      (currentState, currentPosition) <- fs2.Stream.eval(state.get)
-      (newState, nextPosition) <-
-        store
-          .getAll[CustomEnumEventPayload](
-            currentPosition,
-            CustomEnum.eventTypeList
-          )
-          .chunkAll
-          .evalScan[F, (State, Option[SeqNum])](
-            (currentState, None)
-          ) {
-            case ((s, p), chunk) =>
-              for {
-                newState <- chunk.foldLeftM(s)(buildView(store))
-              } yield (
-                newState,
-                chunk.last.map(_.seqNum.inc())
-              )
-          }
-          .lastOr((currentState, None))
-      _ <- nextPosition.traverse { p =>
-        fs2.Stream.eval(state.set(newState, p))
-      }
-    } yield nextPosition
-  }
-
-  private def buildView[F[_]](store: Store[F])(
-      state: State,
-      event: Event[CustomEnumEventPayload]
-  )(implicit F: Monad[F], E: Raise[F, ProjectionError]): F[State] = {
+  ): F[Op] = {
     event.payload match {
       case CustomEnumCreated(label, _, _, MandatoryEnum(defaultValue)) =>
-        F.pure {
-          state.view.mapValues { attributes =>
-            attributes + ((label, defaultValue))
-          }.toMap
-        }
+        F.pure(AddMandatoryLabel(label = label, defaultValue = defaultValue))
 
       case CustomEnumDeleted() =>
         for {
@@ -99,11 +186,7 @@ object DatasetProjection {
             case Some(e @ CustomEnumCreated(_, _, _, _)) => F.pure(e)
             case _                                       => E.raise(CantRetrieveCreationEvent)
           }
-          newState =
-            state.view
-              .mapValues(attributes => attributes - creationEvent.label)
-              .toMap
-        } yield newState
+        } yield DeleteLabel(label = creationEvent.label)
 
       case CustomEnumPinned(datasetId, value) =>
         for {
@@ -118,10 +201,11 @@ object DatasetProjection {
             case _                                       => E.raise(CantRetrieveCreationEvent)
           }
 
-          datasetAttributes = state.getOrElse(datasetId, Map())
-          newAttribute = (creationEvent.label, value)
-          newState = state + ((datasetId, datasetAttributes + newAttribute))
-        } yield newState
+        } yield PinValue(
+          datasetId = datasetId,
+          label = creationEvent.label,
+          value = value
+        )
 
       case CustomEnumUnpinned(datasetId) =>
         for {
@@ -135,12 +219,9 @@ object DatasetProjection {
             case Some(e @ CustomEnumCreated(_, _, _, _)) => F.pure(e)
             case _                                       => E.raise(CantRetrieveCreationEvent)
           }
-          datasetAttributes = state.getOrElse(datasetId, Map())
-          newState =
-            state + ((datasetId, datasetAttributes - creationEvent.label))
-        } yield newState
+        } yield UnpinValue(datasetId = datasetId, label = creationEvent.label)
 
-      case _ => F.pure(state)
+      case _ => F.pure(Ignore)
     }
   }
 }
