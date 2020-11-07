@@ -157,7 +157,7 @@ object PostgresStore {
     val q = fr"""
       SELECT stream_id, seq_num, version, aggregate_type, event_type, payload, metadata, created_at
       FROM events
-      WHERE seq_num > $seqNum AND """ ++ Fragments.in(
+      WHERE seq_num >= $seqNum AND """ ++ Fragments.in(
       fr"event_type",
       eventTypes
     )

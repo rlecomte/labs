@@ -16,9 +16,9 @@ import java.{util => ju}
 import doobie.util.pos.Pos
 import poc.domain.CustomEnum.CustomEnumEventPayload
 import scala.concurrent.duration._
-import poc.domain.DatasetProjection
+import poc.projection.DatasetProjection
 import cats.effect.Bracket
-import poc.domain.DatasetProjection.ProjectionError
+import poc.projection.DatasetProjection.ProjectionError
 
 import cats.implicits._
 import fs2._
@@ -61,7 +61,7 @@ object Main extends IOApp {
           .drain
           .start // unbind process from current thread
 
-      _ <-
+      projectionProcess <-
         Stream
           .awakeEvery[IO](5.second)
           .evalMap { _ =>
@@ -77,7 +77,11 @@ object Main extends IOApp {
       // write a command every second
       _ <- logger.info("Start web server...")
       result <- startServer(store, logger)
-    } yield ExitCode.Success //result
+
+      // shutdown projection process
+      _ <- projectionProcess.cancel
+
+    } yield result //result
   }
 
   def startServer(store: Store[IO], logger: Logger[IO]): IO[ExitCode] = {

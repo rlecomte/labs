@@ -1,34 +1,34 @@
-package poc.domain
+package poc.projection
 
 import poc.tooling.Store
 import poc.tooling.SeqNum
-import cats.effect.concurrent.Ref
 import poc.domain.CustomEnum.CustomEnumEventPayload
 import poc.tooling.Event
-import poc.domain.CustomEnum.CustomEnumCommand
-import poc.domain.CustomEnum.CustomEnumCreated
-import poc.domain.CustomEnum.CustomEnumDeleted
+import poc.tooling.Version
+import poc.domain.CustomEnum._
+import poc.domain.DatasetId
+import poc.tooling.AggregateId
 import cats.effect.Sync
 import cats.mtl.Raise
-import poc.tooling.Version
-import cats.Monad
-import cats.implicits._
-import fs2._
-import poc.domain.CustomEnum.CustomEnumPinned
-import poc.domain.CustomEnum.CustomEnumUnpinned
-import cats.effect.IO
-import cats.data.EitherT
-import scala.concurrent.duration.FiniteDuration
-import java.util.concurrent.TimeUnit
 import cats.effect.Timer
-import scala.concurrent.duration._
 import cats.~>
-import cats.mtl._
-import fs2.Stream
 import cats.data.OptionT
 import cats.Functor
-import _root_.io.chrisdavenport.log4cats.Logger
-import poc.tooling.AggregateId
+import cats.Monad
+import cats.effect.IO
+import cats.data.EitherT
+import cats.effect.concurrent.Ref
+import java.util.concurrent.TimeUnit
+import fs2.Stream
+import io.chrisdavenport.log4cats.Logger
+import scala.concurrent.duration.FiniteDuration
+
+import scala.concurrent.duration._
+import cats.mtl._
+import cats.implicits._
+import fs2._
+import poc.domain.CustomEnum
+import poc.domain.MandatoryEnum
 
 object DatasetProjection {
 
@@ -158,7 +158,7 @@ object DatasetProjection {
           for {
             op <- toOpAlgebra(store)(e)
             newPos = e.seqNum
-          } yield ((applyOpOnState(s, op), newPos), ())
+          } yield ((applyOpOnState(s, op), newPos.inc()), ())
       }
       .map(_._1)
   }
