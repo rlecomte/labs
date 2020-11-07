@@ -25,6 +25,8 @@ import fs2._
 import tooling._
 import cats.mtl._
 import scala.concurrent.duration._
+import org.http4s.server.blaze.BlazeServerBuilder
+import poc.api.CustomEnumRoutes
 
 object Main extends IOApp {
 
@@ -49,56 +51,35 @@ object Main extends IOApp {
       store = new PostgresStore(xa)
 
       _ <- logger.info("Create state reference")
-      // create projection state reference in memory
       ref <- DatasetProjection.createStateRef
 
-      // run projection process in background
       _ <- logger.info("Start projection background process...")
       _ <-
         DatasetProjection
           .run(store, logger, ref)
           .compile
           .drain
-          .start // unbind process from current thread
-
-      projectionProcess <-
-        Stream
-          .awakeEvery[IO](5.second)
-          .evalMap { _ =>
-            for {
-              s <- ref.get
-              _ <- logger.info(s"current projection state : $s")
-            } yield ()
-          }
-          .compile
-          .drain
           .start
 
-      // write a command every second
       _ <- logger.info("Start web server...")
-      result <- startServer(store, logger)
-
-      // shutdown projection process
-      _ <- projectionProcess.cancel
-
-    } yield result //result
+      result <- startServer(store, logger).compile.drain.as(ExitCode.Success)
+    } yield result
   }
 
-  def startServer(store: Store[IO], logger: Logger[IO]): IO[ExitCode] = {
-    val stream = for {
-      _ <- Stream.awakeEvery[EitherT[IO, AppError, *]](1.seconds)
-      _ <- Stream.eval {
-        logger
-          .mapK(EitherT.liftK[IO, AppError])
-          .info("Send CreateEnum command...")
-      }
-      _ <- CustomEnumAlg.createEnum(store.mapK(EitherT.liftK[IO, AppError]))
-    } yield ()
+  def startServer(store: Store[IO], logger: Logger[IO]): Stream[IO, Nothing] = {
+    import scala.concurrent.ExecutionContext.global
+    import org.http4s.implicits._
 
-    stream.compile.drain.value.flatMap {
-      case Right(_) =>
-        logger.info("graceful shutdown") *> IO(ExitCode.Success)
-      case Left(err) => logger.error(s"Oops $err") *> IO(ExitCode.Error)
-    }
-  }
+    val httpApp = CustomEnumRoutes.customEnumRoutes(store, logger).orNotFound
+    // With Middlewares in place
+    val finalHttpApp =
+      org.http4s.server.middleware.Logger.httpApp[IO](true, true)(httpApp)
+
+    for {
+      exitCode <- BlazeServerBuilder[IO](global)
+        .bindHttp(8080, "0.0.0.0")
+        .withHttpApp(finalHttpApp)
+        .serve
+    } yield exitCode
+  }.drain
 }

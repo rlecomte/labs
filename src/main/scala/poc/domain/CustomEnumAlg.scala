@@ -142,35 +142,4 @@ object CustomEnumAlg {
           case (s, _) => s.asRight
         }
     }
-
-  def createEnum[F[_]](
-      store: Store[F]
-  )(implicit
-      F: LiftIO[F],
-      A: Monad[F],
-      E: RaiseError[F]
-  ): fs2.Stream[F, Unit] = {
-    for {
-      aggregateId <- fs2.Stream.eval(F.liftIO(AggregateId.newAggregateId[IO]))
-      command = CreateCommand(
-        aggregateId = aggregateId,
-        label = "foo",
-        description = "bar",
-        choices = NonEmptyList.of("blue pill", "red pill"),
-        defaultValue = Some("blue pill"),
-        mandatory = true
-      )
-      _ <- Api.applyCommand(store)(
-        command,
-        stateBuilder,
-        commandHandler
-      )
-    } yield ()
-  }
-
-  def deleteEnum(): Unit = ()
-
-  def pin(): Unit = ()
-
-  def unpin(): Unit = ()
 }

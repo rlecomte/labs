@@ -134,7 +134,7 @@ object DatasetProjection {
         // if some : we have successfully read events from store and a new state is available : register it in our Ref
         case Some(t @ (s, _)) =>
           Stream
-            .eval(logger.info("refresh projection") *> state.set(t))
+            .eval(logger.info(s"refresh projection : $s") *> state.set(t))
             .map(_ => s)
         // otherwise keep current projection state
         case None => Stream.eval(IO.pure(currentState._1))
