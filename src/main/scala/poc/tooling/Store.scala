@@ -15,6 +15,7 @@ import io.circe.Encoder
 import cats.ApplicativeError
 import fs2._
 import cats.mtl.MonadPartialOrder
+import cats.data.NonEmptyList
 
 trait Store[F[_]] {
 
@@ -28,7 +29,7 @@ trait Store[F[_]] {
 
   def getAll[A](
       seqNum: SeqNum,
-      eventTypes: List[String]
+      eventTypes: NonEmptyList[String]
   )(implicit decoder: Decoder[A]): fs2.Stream[F, Event[A]]
 
   def register[A](
@@ -62,8 +63,8 @@ object Store {
         fk(store.getAggregateEventFromVersion[A](id, version))
       }
 
-      override def getAll[A](seqNum: SeqNum, eventTypes: List[String])(implicit
-          decoder: Decoder[A]
+      override def getAll[A](seqNum: SeqNum, eventTypes: NonEmptyList[String])(
+          implicit decoder: Decoder[A]
       ): Stream[G, Event[A]] = {
         store.getAll[A](seqNum, eventTypes).translate(fk)
       }

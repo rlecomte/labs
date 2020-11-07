@@ -3,7 +3,7 @@ package poc.tooling
 import cats.{Applicative, Eval, Traverse}
 import cats.implicits._
 import io.circe._, io.circe.generic.semiauto._
-import java.time.ZonedDateTime
+import java.time.OffsetDateTime
 
 case class Event[A](
     id: AggregateId,
@@ -13,15 +13,16 @@ case class Event[A](
     eventType: String,
     payload: A,
     metadata: EventMetadata,
-    createdAt: ZonedDateTime
+    createdAt: OffsetDateTime
 )
 
 object Event {
+
   implicit val eventTraverse: Traverse[Event] = new Traverse[Event] {
     def traverse[G[_]: Applicative, A, B](
         fa: Event[A]
     )(f: A => G[B]): G[Event[B]] = {
-      f(fa.payload).map(b => fa.map(_ => b))
+      f(fa.payload).map(b => fa.copy(payload = b))
     }
 
     def foldLeft[A, B](fa: Event[A], b: B)(f: (B, A) => B): B =

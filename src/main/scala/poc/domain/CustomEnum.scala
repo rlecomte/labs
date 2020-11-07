@@ -36,7 +36,7 @@ object CustomEnum {
   val customEnumPinnedEventType = "custom-enum-pinned-event-type"
   val customEnumUnpinnedEventType = "custom-enum-unpinned-event-type"
 
-  val eventTypeList = List(
+  val eventTypeList = NonEmptyList.of(
     customEnumCreatedEventType,
     customEnumChoicesAddedEventType,
     customEnumDeletedEventType,

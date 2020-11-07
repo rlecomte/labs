@@ -56,7 +56,7 @@ object Main extends IOApp {
       _ <- logger.info("Start projection background process...")
       _ <-
         DatasetProjection
-          .run(store, ref)
+          .run(store, logger, ref)
           .compile
           .drain
           .start // unbind process from current thread

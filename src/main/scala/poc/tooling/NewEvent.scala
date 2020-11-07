@@ -17,7 +17,7 @@ object NewEvent {
     def traverse[G[_]: Applicative, A, B](
         fa: NewEvent[A]
     )(f: A => G[B]): G[NewEvent[B]] = {
-      f(fa.payload).map(b => fa.map(_ => b))
+      f(fa.payload).map(b => fa.copy(payload = b))
     }
 
     def foldLeft[A, B](fa: NewEvent[A], b: B)(f: (B, A) => B): B =

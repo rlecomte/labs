@@ -27,15 +27,16 @@ import cats.mtl._
 import fs2.Stream
 import cats.data.OptionT
 import cats.Functor
+import _root_.io.chrisdavenport.log4cats.Logger
 
 object DatasetProjection {
 
-  class LogAndThrowError[F[_], E <: Throwable](implicit F: Sync[F])
+  class ThrowError[F[_], E <: Throwable](implicit F: Sync[F])
       extends (EitherT[F, E, *] ~> F) {
 
     def apply[A](fa: EitherT[F, E, A]): F[A] = {
       fa.value.flatMap {
-        case Left(err) => F.delay(println(s"Error $err")) *> F.raiseError(err)
+        case Left(err) => F.raiseError(err)
         case Right(a)  => F.pure(a)
       }
     }
@@ -93,12 +94,13 @@ object DatasetProjection {
 
   def run(
       store: Store[IO],
+      logger: Logger[IO],
       state: Ref[IO, (State, SeqNum)]
   )(implicit
       timer: Timer[IO]
   ): fs2.Stream[IO, Unit] = {
     for {
-      _ <- Stream.every[IO](1.second)
+      _ <- Stream.awakeEvery[IO](1.second)
       currentState <- Stream.eval(state.get) // get the current projection state
       newState <-
         // read all unread events from the eventstore and apply it to the projection state
@@ -108,23 +110,32 @@ object DatasetProjection {
             case (s, pos) =>
               getNextStateWithStreamPosition[EitherT[IO, ProjectionError, *]](
                 store.mapK(EitherT.liftK)
-              )(s, pos)
+              )(s, pos) // apply events to the state from the new position
                 .translate(
-                  new LogAndThrowError[IO, ProjectionError]
-                ) // unlift IO from EitherT : print and throw error
-                .attempt // handle throwable to avoid killing process
-                .collect {
-                  case Right(v) => v
-                } // collect only successful value
+                  new ThrowError[IO, ProjectionError]
+                ) // unlift IO from EitherT : throw error
                 .compile // compile stream to IO
                 .last // get only last element (the last state)
                 .map(r => r.zip(r))
+                .handleErrorWith {
+                  case projectionError: ProjectionError =>
+                    handleProjectionError(logger)(
+                      projectionError
+                    ).map(_ => None) // log and forget
+                  case err =>
+                    logger.error(err)(
+                      "Unexpected error on dataset projection"
+                    ) *> IO.raiseError(err)
+                }
           }
           .last
       r <- newState match {
         // if some : we have successfully read events from store and a new state is available : register it in our Ref
-        case Some(t @ (s, _)) => Stream.eval(state.set(t)).map(_ => s)
-        // elsewhere keep current projection state
+        case Some(t @ (s, _)) =>
+          Stream
+            .eval(logger.info("refresh projection") *> state.set(t))
+            .map(_ => s)
+        // otherwise keep current projection state
         case None => Stream.eval(IO.pure(currentState._1))
       }
     } yield ()
@@ -141,13 +152,14 @@ object DatasetProjection {
         position,
         CustomEnum.eventTypeList
       )
-      .evalScan((state, position)) {
+      .evalMapAccumulate((state, position)) {
         case ((s, _), e) =>
           for {
             op <- toOpAlgebra(store)(e)
-            nextPos = e.seqNum.inc()
-          } yield (applyOpOnState(s, op), nextPos)
+            newPos = e.seqNum
+          } yield ((applyOpOnState(s, op), newPos), ())
       }
+      .map(_._1)
   }
 
   private def applyOpOnState(state: State, op: Op): State = {
@@ -222,6 +234,15 @@ object DatasetProjection {
         } yield UnpinValue(datasetId = datasetId, label = creationEvent.label)
 
       case _ => F.pure(Ignore)
+    }
+  }
+
+  def handleProjectionError(
+      logger: Logger[IO]
+  )(projectionError: ProjectionError): IO[Unit] = {
+    projectionError match {
+      case CantRetrieveCreationEvent =>
+        logger.error("Can't retrieve creation event.")
     }
   }
 }

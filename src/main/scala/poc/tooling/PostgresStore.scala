@@ -31,7 +31,7 @@ class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
 
   def getAll[A](
       seqNum: SeqNum,
-      eventTypes: List[String]
+      eventTypes: NonEmptyList[String]
   )(implicit encoder: Decoder[A]): fs2.Stream[F, Event[A]] = {
     PostgresStore.selectAllEvents(seqNum, eventTypes).transact(transactor)
   }
@@ -150,16 +150,19 @@ object PostgresStore {
 
   def selectAllEvents[A](
       seqNum: SeqNum,
-      eventTypes: List[String]
+      eventTypes: NonEmptyList[String]
   )(implicit decoder: Decoder[A]): fs2.Stream[ConnectionIO, Event[A]] = {
     val F = Sync[ConnectionIO]
 
-    sql"""
-      SELECT stream_id, seq_num, version, aggregate_type, event-type, payload, metadata, created_at
+    val q = fr"""
+      SELECT stream_id, seq_num, version, aggregate_type, event_type, payload, metadata, created_at
       FROM events
-      WHERE seq_num > $seqNum AND event_type IN $eventTypes
-    """
-      .query[Event[Json]]
+      WHERE seq_num > $seqNum AND """ ++ Fragments.in(
+      fr"event_type",
+      eventTypes
+    )
+
+    q.query[Event[Json]]
       .stream
       .evalMap[ConnectionIO, Event[A]] {
         case e =>
@@ -178,7 +181,7 @@ object PostgresStore {
     val F = Sync[ConnectionIO]
 
     sql"""
-      SELECT stream_id, seq_num, version, aggregate_type, event-type, payload, metadata, created_at
+      SELECT stream_id, seq_num, version, aggregate_type, event_type, payload, metadata, created_at
       FROM events
       WHERE version = $version AND stream_id = $id
     """
