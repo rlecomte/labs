@@ -39,12 +39,10 @@ object CustomEnumAlg {
                 E.raise(
                   CommandRefused("Default value should be a valid enum value.")
                 )
+              } else if (mandatory) {
+                F.pure(MandatoryEnum(v))
               } else {
-                if (mandatory) {
-                  F.pure(MandatoryEnum(v))
-                } else {
-                  F.pure(OptionalEnum(defaultValue))
-                }
+                F.pure(OptionalEnum(defaultValue))
               }
             case None =>
               if (mandatory) {
