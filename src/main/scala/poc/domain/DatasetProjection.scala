@@ -28,6 +28,7 @@ import fs2.Stream
 import cats.data.OptionT
 import cats.Functor
 import _root_.io.chrisdavenport.log4cats.Logger
+import poc.tooling.AggregateId
 
 object DatasetProjection {
 
@@ -188,31 +189,12 @@ object DatasetProjection {
 
       case CustomEnumDeleted() =>
         for {
-          creationEventOpt <-
-            store
-              .getAggregateEventFromVersion[CustomEnumEventPayload](
-                event.id,
-                Version.init
-              )
-          creationEvent <- creationEventOpt.map(_.payload) match {
-            case Some(e @ CustomEnumCreated(_, _, _, _)) => F.pure(e)
-            case _                                       => E.raise(CantRetrieveCreationEvent)
-          }
+          creationEvent <- fetchCreationEvent(store)(event.id)
         } yield DeleteLabel(label = creationEvent.label)
 
       case CustomEnumPinned(datasetId, value) =>
         for {
-          creationEventOpt <-
-            store
-              .getAggregateEventFromVersion[CustomEnumEventPayload](
-                event.id,
-                Version.init
-              )
-          creationEvent <- creationEventOpt.map(_.payload) match {
-            case Some(e @ CustomEnumCreated(_, _, _, _)) => F.pure(e)
-            case _                                       => E.raise(CantRetrieveCreationEvent)
-          }
-
+          creationEvent <- fetchCreationEvent(store)(event.id)
         } yield PinValue(
           datasetId = datasetId,
           label = creationEvent.label,
@@ -221,20 +203,31 @@ object DatasetProjection {
 
       case CustomEnumUnpinned(datasetId) =>
         for {
-          creationEventOpt <-
-            store
-              .getAggregateEventFromVersion[CustomEnumEventPayload](
-                event.id,
-                Version.init
-              )
-          creationEvent <- creationEventOpt.map(_.payload) match {
-            case Some(e @ CustomEnumCreated(_, _, _, _)) => F.pure(e)
-            case _                                       => E.raise(CantRetrieveCreationEvent)
-          }
+          creationEvent <- fetchCreationEvent(store)(event.id)
         } yield UnpinValue(datasetId = datasetId, label = creationEvent.label)
 
       case _ => F.pure(Ignore)
     }
+  }
+
+  def fetchCreationEvent[F[_]](store: Store[F])(
+      aggregateId: AggregateId
+  )(implicit
+      F: Monad[F],
+      E: Raise[F, ProjectionError]
+  ): F[CustomEnumCreated] = {
+    for {
+      creationEventOpt <-
+        store
+          .getAggregateEventFromVersion[CustomEnumEventPayload](
+            aggregateId,
+            Version.init
+          )
+      creationEvent <- creationEventOpt.map(_.payload) match {
+        case Some(e @ CustomEnumCreated(_, _, _, _)) => F.pure(e)
+        case _                                       => E.raise(CantRetrieveCreationEvent)
+      }
+    } yield creationEvent
   }
 
   def handleProjectionError(
