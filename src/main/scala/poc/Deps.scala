@@ -10,8 +10,14 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import cats.effect.ContextShift
 import poc.tooling.Store
 import poc.tooling.PostgresStore
+import cats.~>
 
-case class Deps[F[_]](store: Store[F], logger: Logger[F])
+case class Deps[F[_]](store: Store[F], logger: Logger[F]) {
+  def mapK[G[_]](f: F ~> G): Deps[G] = {
+    Deps(store.mapK(f), logger.mapK(f))
+  }
+}
+
 object Deps {
 
   // Resource yielding a transactor configured with a bounded connect EC and an unbounded

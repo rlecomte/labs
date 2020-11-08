@@ -24,10 +24,10 @@ object Main extends IOApp {
               .run(store, logger, ref)
               .compile
               .drain
-              .start
+              .start // unbind process from current thread
 
           _ <- logger.info("Start web server...")
-          _ <- Server.run(conf, store).compile.drain
+          _ <- Server.run(conf, store, ref).compile.drain
         } yield ExitCode.Success
     }
 }

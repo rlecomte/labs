@@ -14,15 +14,17 @@ import cats.effect.Timer
 import cats.~>
 import io.chrisdavenport.log4cats.Logger
 
-import scala.concurrent.duration._
-import cats.implicits._
-import fs2._
 import poc.domain.CustomEnum
 import poc.domain.MandatoryEnum
 import cats.data.EitherT
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.Monad
+import io.circe.Encoder
+import io.circe.Json
+import scala.concurrent.duration._
+import cats.implicits._
+import fs2._
 
 object DatasetProjection {
 
@@ -83,6 +85,22 @@ object DatasetProjection {
         .map(attrs => State(mandatories, datasetAttributes + ((id, attrs))))
         .getOrElse(this)
     }
+  }
+
+  object State {
+    implicit val circeEncoder: Encoder[State] = new Encoder[State] {
+      def apply(a: State): Json =
+        Json.obj(
+          "defaultAttributesValues" -> Encoder
+            .encodeMap[String, String]
+            .apply(a.mandatories),
+          "datasetAttributes" -> Encoder
+            .encodeMap[String, Attributes]
+            .apply(a.datasetAttributes.map { case (k, v) => (k.toString(), v) })
+        )
+    }
+    import org.http4s.circe._
+    implicit def stateEntityEncoder = jsonEncoderOf[IO, State]
   }
 
   def createStateRef = Ref[IO].of((State(Map(), Map()), SeqNum.init))
