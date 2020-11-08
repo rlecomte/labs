@@ -1,20 +1,9 @@
 package poc.tooling
 
-import cats.implicits._
-import java.{util => ju}
-import cats.instances.map
-import cats.Applicative
-import cats.Traverse
-import cats.Eval
-import cats.effect.IO
-import cats.Foldable
 import cats.~>
-import io.circe.Json
 import io.circe.Decoder
 import io.circe.Encoder
-import cats.ApplicativeError
 import fs2._
-import cats.mtl.MonadPartialOrder
 import cats.data.NonEmptyList
 
 trait Store[F[_]] {

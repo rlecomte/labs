@@ -1,16 +1,8 @@
 package poc
 
 import cats.data.Kleisli
-import cats.mtl.{Raise, Handle}
-import poc.tooling.Event
-import cats.data.EitherT
-import cats.effect.IO
 
 package object tooling {
-  type RaiseError[F[_]] = Raise[F, AppError]
-
-  type HandleError[F[_]] = Handle[F, AppError]
-
   type StateBuilder[S, E] =
     Kleisli[Either[AppError, ?], (Option[S], Event[E]), Option[S]]
 

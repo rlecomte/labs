@@ -1,17 +1,14 @@
 package poc.tooling
 
-import cats.effect.IO
 import io.circe.Decoder
 import io.circe.Json
 import io.circe.Encoder
 import io.circe.syntax._
 import java.{util => ju}
-import java.time.ZonedDateTime
 import cats.effect.Sync
 import cats.implicits._
 import doobie._
 import doobie.implicits._
-import doobie.syntax.ConnectionIOOps
 import cats.data.NonEmptyList
 import doobie.hikari.HikariTransactor
 

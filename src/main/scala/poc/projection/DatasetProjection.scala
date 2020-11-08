@@ -12,23 +12,17 @@ import cats.effect.Sync
 import cats.mtl.Raise
 import cats.effect.Timer
 import cats.~>
-import cats.data.OptionT
-import cats.Functor
-import cats.Monad
-import cats.effect.IO
-import cats.data.EitherT
-import cats.effect.concurrent.Ref
-import java.util.concurrent.TimeUnit
-import fs2.Stream
 import io.chrisdavenport.log4cats.Logger
-import scala.concurrent.duration.FiniteDuration
 
 import scala.concurrent.duration._
-import cats.mtl._
 import cats.implicits._
 import fs2._
 import poc.domain.CustomEnum
 import poc.domain.MandatoryEnum
+import cats.data.EitherT
+import cats.effect.IO
+import cats.effect.concurrent.Ref
+import cats.Monad
 
 object DatasetProjection {
 
@@ -130,7 +124,7 @@ object DatasetProjection {
                 }
           }
           .last
-      r <- newState match {
+      _ <- newState match {
         // if some : we have successfully read events from store and a new state is available : register it in our Ref
         case Some(t @ (s, _)) =>
           Stream

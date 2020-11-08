@@ -16,7 +16,7 @@ object Deps {
 
   // Resource yielding a transactor configured with a bounded connect EC and an unbounded
   // transaction EC. Everything will be closed and shut down cleanly after use.
-  def mkTransactor(implicit
+  def mkTransactor(config: Config)(implicit
       cs: ContextShift[IO]
   ): Resource[IO, HikariTransactor[IO]] =
     for {
@@ -24,9 +24,9 @@ object Deps {
       be <- Blocker[IO] // our blocking EC
       xa <- HikariTransactor.newHikariTransactor[IO](
         "org.postgresql.Driver",
-        "jdbc:postgresql://localhost:5434/postgres",
-        "postgres",
-        "trololo",
+        s"jdbc:postgresql://${config.postgresStoreHost}:${config.postgresStorePort}/${config.postgresStoreDb}",
+        config.postgresStoreUser,
+        config.postgresStorePassword,
         ce, // await connection here
         be // execute JDBC operations here
       )
@@ -34,9 +34,11 @@ object Deps {
 
   val mkLogger = Slf4jLogger.create[IO]
 
-  def deps()(implicit cs: ContextShift[IO]): Resource[IO, Deps[IO]] = {
+  def deps(
+      config: Config
+  )(implicit cs: ContextShift[IO]): Resource[IO, Deps[IO]] = {
     for {
-      xa <- mkTransactor
+      xa <- mkTransactor(config)
       logger <- Resource.liftF(mkLogger)
     } yield Deps(new PostgresStore(xa), logger)
   }

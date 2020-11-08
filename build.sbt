@@ -17,8 +17,10 @@ val ScalacOptions = Seq(
   "-language:higherKinds",
   "-language:postfixOps",
   "-feature",
-  "-Xfatal-warnings"
+  "-Xfatal-warnings",
+  "-Ywarn-unused"
 )
+scalacOptions := ScalacOptions
 
 val GlobalSettings = Seq(
   scalaVersion := ScalaVersion,

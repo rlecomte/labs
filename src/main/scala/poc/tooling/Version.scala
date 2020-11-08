@@ -1,6 +1,6 @@
 package poc.tooling
 
-import io.circe._, io.circe.generic.semiauto._
+import io.circe._
 
 case class Version(value: Long) extends AnyVal {
   def inc(): Version = Version(value + 1)

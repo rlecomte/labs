@@ -2,20 +2,15 @@ package poc.domain
 
 import cats.Applicative
 import cats.mtl.Raise
-import cats.data.{NonEmptyList, Kleisli}
 import cats.implicits._
-import cats.effect.Sync
 import poc.tooling._
-import cats.effect.LiftIO
-import cats.effect.IO
-import cats.Monad
 
 object CustomEnumAlg {
   import CustomEnum._
 
   def commandHandler[F[_]](implicit
       F: Applicative[F],
-      E: RaiseError[F]
+      E: Raise[F, AppError]
   ): CommandHandler[
     F,
     CustomEnumCommand,
@@ -67,7 +62,7 @@ object CustomEnumAlg {
           )
         )
 
-      case (Some(s), AddChoicesCommand(id, newChoices)) =>
+      case (Some(_), AddChoicesCommand(id, newChoices)) =>
         F.pure(
           List(
             NewEvent(

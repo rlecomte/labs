@@ -1,17 +1,9 @@
 package poc.domain
 
 import cats.data.NonEmptyList
-import cats.effect.IO
-import cats.Foldable
-import cats.implicits._
-import cats.effect.Sync
-import cats.Applicative
-import cats.mtl.Raise
-import cats.data.Kleisli
-
 import io.circe.{Decoder, Encoder}, io.circe.generic.auto._
 import io.circe.syntax._
-
+import cats.implicits._
 import poc.tooling._
 
 sealed trait EnumType

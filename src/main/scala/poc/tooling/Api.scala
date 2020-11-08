@@ -1,8 +1,9 @@
 package poc.tooling
 
-import cats.implicits._
+import cats.mtl.Raise
 import cats.Monad
 import io.circe.{Decoder, Encoder}
+import cats.implicits._
 
 object Api {
 
@@ -13,7 +14,7 @@ object Api {
   )(implicit
       DC: Decoder[E],
       EC: Encoder[E],
-      E: RaiseError[F],
+      E: Raise[F, AppError],
       F: Monad[F]
   ): fs2.Stream[F, Unit] = {
     store

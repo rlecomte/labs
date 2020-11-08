@@ -1,7 +1,7 @@
 package poc.tooling
 
 import java.{util => ju}
-import io.circe._, io.circe.generic.semiauto._
+import io.circe.generic.semiauto._
 import cats.effect.Sync
 
 case class AggregateId(value: ju.UUID) extends AnyVal

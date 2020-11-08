@@ -2,7 +2,7 @@ package poc.tooling
 
 import cats.{Applicative, Eval, Traverse}
 import cats.implicits._
-import io.circe._, io.circe.generic.semiauto._
+import io.circe._
 import java.time.OffsetDateTime
 
 case class Event[A](
@@ -35,6 +35,6 @@ object Event {
   }
 
   implicit def eventDecoder[A](implicit
-      encoder: Decoder[A]
-  ): Decoder[Event[A]] = deriveDecoder[Event[A]]
+      decoder: Decoder[A]
+  ): Decoder[Event[A]] = Decoder[Event[A]]
 }

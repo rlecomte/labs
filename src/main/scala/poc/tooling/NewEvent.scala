@@ -2,7 +2,7 @@ package poc.tooling
 
 import cats.{Applicative, Eval, Traverse}
 import cats.implicits._
-import io.circe._, io.circe.generic.semiauto._
+import io.circe._
 
 case class NewEvent[A](
     id: AggregateId,
@@ -31,5 +31,5 @@ object NewEvent {
 
   implicit def newEventEncoder[A](implicit
       encoder: Encoder[A]
-  ): Encoder[NewEvent[A]] = deriveEncoder[NewEvent[A]]
+  ): Encoder[NewEvent[A]] = Encoder[NewEvent[A]]
 }
