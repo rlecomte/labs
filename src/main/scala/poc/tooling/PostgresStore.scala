@@ -12,10 +12,11 @@ import cats.implicits._
 import doobie._
 import doobie.implicits._
 import doobie.syntax.ConnectionIOOps
-import doobie.util.transactor.Transactor
 import cats.data.NonEmptyList
+import doobie.hikari.HikariTransactor
 
-class PostgresStore[F[_]: Sync](transactor: Transactor[F]) extends Store[F] {
+class PostgresStore[F[_]: Sync](transactor: HikariTransactor[F])
+    extends Store[F] {
 
   def getAggregateEvents[A](id: AggregateId)(implicit
       decoder: Decoder[A]

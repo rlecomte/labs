@@ -27,59 +27,30 @@ import cats.mtl._
 import scala.concurrent.duration._
 import org.http4s.server.blaze.BlazeServerBuilder
 import poc.api.CustomEnumRoutes
+import cats.effect.Resource
+import doobie.util.ExecutionContexts
+import cats.effect.Blocker
+import doobie.hikari.HikariTransactor
+import poc.api.Server
 
 object Main extends IOApp {
+  def run(args: List[String]): IO[ExitCode] =
+    Deps.deps().use {
+      case Deps(store, logger) =>
+        for {
+          _ <- logger.info("Create state reference")
+          ref <- DatasetProjection.createStateRef
 
-  val mkXa = IO(
-    Transactor.fromDriverManager[IO](
-      "org.postgresql.Driver",
-      "jdbc:postgresql://localhost:5434/postgres",
-      "postgres",
-      "trololo"
-    )
-  )
+          _ <- logger.info("Start projection background process...")
+          _ <-
+            DatasetProjection
+              .run(store, logger, ref)
+              .compile
+              .drain
+              .start
 
-  val mkLogger = Slf4jLogger.create[IO]
-
-  def run(args: List[String]): IO[ExitCode] = {
-
-    for {
-      logger <- mkLogger
-      _ <- logger.info("Start!")
-
-      xa <- mkXa
-      store = new PostgresStore(xa)
-
-      _ <- logger.info("Create state reference")
-      ref <- DatasetProjection.createStateRef
-
-      _ <- logger.info("Start projection background process...")
-      _ <-
-        DatasetProjection
-          .run(store, logger, ref)
-          .compile
-          .drain
-          .start
-
-      _ <- logger.info("Start web server...")
-      result <- startServer(store, logger).compile.drain.as(ExitCode.Success)
-    } yield result
-  }
-
-  def startServer(store: Store[IO], logger: Logger[IO]): Stream[IO, Nothing] = {
-    import scala.concurrent.ExecutionContext.global
-    import org.http4s.implicits._
-
-    val httpApp = CustomEnumRoutes.customEnumRoutes(store, logger).orNotFound
-    // With Middlewares in place
-    val finalHttpApp =
-      org.http4s.server.middleware.Logger.httpApp[IO](true, true)(httpApp)
-
-    for {
-      exitCode <- BlazeServerBuilder[IO](global)
-        .bindHttp(8080, "0.0.0.0")
-        .withHttpApp(finalHttpApp)
-        .serve
-    } yield exitCode
-  }.drain
+          _ <- logger.info("Start web server...")
+          _ <- Server.run(store, logger).compile.drain
+        } yield ExitCode.Success
+    }
 }
