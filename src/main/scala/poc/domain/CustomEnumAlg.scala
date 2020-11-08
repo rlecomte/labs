@@ -4,6 +4,7 @@ import cats.Applicative
 import cats.mtl.Raise
 import cats.implicits._
 import poc.tooling._
+import cats.data.NonEmptyList
 
 object CustomEnumAlg {
   import CustomEnum._
@@ -48,7 +49,7 @@ object CustomEnumAlg {
                 F.pure(OptionalEnum(None))
               }
           }
-        } yield List(
+        } yield NonEmptyList.of(
           NewEvent(
             id = id,
             aggregateType = customEnumAggregateType,
@@ -64,7 +65,7 @@ object CustomEnumAlg {
 
       case (Some(_), AddChoicesCommand(id, newChoices)) =>
         F.pure(
-          List(
+          NonEmptyList.of(
             NewEvent(
               id = id,
               aggregateType = customEnumAggregateType,
@@ -76,7 +77,7 @@ object CustomEnumAlg {
 
       case (Some(_), PinCommand(id, datasetId, value)) =>
         F.pure(
-          List(
+          NonEmptyList.of(
             NewEvent(
               id = id,
               aggregateType = customEnumAggregateType,
@@ -87,7 +88,7 @@ object CustomEnumAlg {
         )
       case (Some(_), UnpinCommand(id, datasetId)) =>
         F.pure(
-          List(
+          NonEmptyList.of(
             NewEvent(
               id = id,
               aggregateType = customEnumAggregateType,
@@ -99,12 +100,12 @@ object CustomEnumAlg {
 
       case (Some(_), DeleteCommand(id)) =>
         F.pure(
-          List(
+          NonEmptyList.of(
             NewEvent(
               id = id,
               aggregateType = customEnumAggregateType,
               eventType = customEnumDeletedEventType,
-              CustomEnumDeleted()
+              CustomEnumDeleted("deleted by user")
             )
           )
         )
@@ -121,17 +122,18 @@ object CustomEnumAlg {
         (state, event.payload) match {
           case (None, CustomEnumCreated(label, descr, choices, defaultValue)) =>
             CustomEnum(
-              event.id,
-              label,
-              descr,
-              choices,
-              defaultValue
+              id = event.id,
+              label = label,
+              description = descr,
+              choices = choices,
+              enumType = defaultValue,
+              deleted = false
             ).some.asRight
 
           case (Some(s), CustomEnumChoicesAdded(choices)) =>
             s.copy(choices = s.choices |+| choices).some.asRight
 
-          case (Some(s), CustomEnumDeleted()) =>
+          case (Some(s), CustomEnumDeleted(_)) =>
             s.copy(deleted = true).some.asRight
 
           case (s, _) => s.asRight

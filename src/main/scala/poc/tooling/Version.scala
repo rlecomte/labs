@@ -3,7 +3,7 @@ package poc.tooling
 import io.circe._
 
 case class Version(value: Long) extends AnyVal {
-  def inc(): Version = Version(value + 1)
+  def inc(i: Int = 1): Version = Version(value + i)
 }
 
 object Version {

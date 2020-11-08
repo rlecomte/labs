@@ -16,7 +16,7 @@ object Api {
       EC: Encoder[E],
       E: Raise[F, AppError],
       F: Monad[F]
-  ): fs2.Stream[F, Unit] = {
+  ): fs2.Stream[F, AggregateId] = {
     store
       .getAggregateEvents[E](command.aggregateId)
       .evalMapAccumulate[F, Option[S], Version](Option.empty[S]) { (s, e) =>
@@ -29,13 +29,18 @@ object Api {
           (state, Some(lastVersion)) // an aggregate already exist
         case None => (None, None) //no trace of the aggregate in the store
       }
-      .evalMap[F, Unit] {
+      .evalMap[F, AggregateId] {
         case (state, lastVersion) =>
           for {
             newEvents <- commandHandler(state, command)
             result <-
               store.register(command.aggregateId, lastVersion, newEvents)
-          } yield if (result) F.pure(()) else E.raise(UnconsistentState)
+
+            aggregateId <- {
+              if (result) F.pure(command.aggregateId)
+              else E.raise(UnconsistentState)
+            }
+          } yield aggregateId
       }
   }
 }

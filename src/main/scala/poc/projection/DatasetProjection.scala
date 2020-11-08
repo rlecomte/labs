@@ -56,9 +56,14 @@ object DatasetProjection {
       datasetAttributes: Map[DatasetId, Attributes]
   ) {
     def addMandatory(label: String, value: String): State = {
+      val oldValue = mandatories.get(label)
       val mand = mandatories + ((label, value))
       val attrs = datasetAttributes.view.mapValues { attr =>
-        attr + ((label, value))
+        if (attr.get(label).zip(oldValue).map(==).getOrElse(true)) {
+          attr + ((label, value))
+        } else {
+          attr
+        }
       }.toMap
 
       State(mand, attrs)
@@ -121,8 +126,8 @@ object DatasetProjection {
         Stream
           .unfoldEval(currentState) {
             case (s, pos) =>
-              getNextStateWithStreamPosition[EitherT[IO, ProjectionError, *]](
-                store.mapK(EitherT.liftK)
+              getNextStateWithStreamPosition(
+                store.mapK(EitherT.liftK[IO, ProjectionError])
               )(s, pos) // apply events to the state from the new position
                 .translate(
                   new ThrowError[IO, ProjectionError]
@@ -199,7 +204,7 @@ object DatasetProjection {
       case CustomEnumCreated(label, _, _, MandatoryEnum(defaultValue)) =>
         F.pure(AddMandatoryLabel(label = label, defaultValue = defaultValue))
 
-      case CustomEnumDeleted() =>
+      case CustomEnumDeleted(_) =>
         for {
           creationEvent <- fetchCreationEvent(store)(event.id)
         } yield DeleteLabel(label = creationEvent.label)

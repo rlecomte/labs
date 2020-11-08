@@ -37,7 +37,7 @@ class PostgresStore[F[_]: Sync](transactor: HikariTransactor[F])
   def register[A](
       id: AggregateId,
       version: Option[Version],
-      events: List[NewEvent[A]]
+      events: NonEmptyList[NewEvent[A]]
   )(implicit
       encoder: Encoder[A]
   ): F[Boolean] = {
@@ -91,7 +91,7 @@ object PostgresStore {
   def insertEvents[A](
       id: AggregateId,
       version: Option[Version],
-      newEvents: List[NewEvent[A]]
+      newEvents: NonEmptyList[NewEvent[A]]
   )(implicit encoder: Encoder[A]) = {
     val F = Sync[ConnectionIO]
 
@@ -113,15 +113,16 @@ object PostgresStore {
       VALUES (?, ?, ?, ?, ?, ?)
     """
 
-    val tuples = newEvents.map { e =>
-      (
-        e.id,
-        e.aggregateType,
-        e.eventType,
-        e.payload.asJson,
-        e.metadata,
-        newVersion
-      )
+    val tuples = newEvents.zipWithIndex.map {
+      case (e, i) =>
+        (
+          e.id,
+          e.aggregateType,
+          e.eventType,
+          e.payload.asJson,
+          e.metadata,
+          newVersion.inc(i)
+        )
     }
 
     val insertEvents: ConnectionIO[Int] =
@@ -129,9 +130,12 @@ object PostgresStore {
         insertEventsSql
       ).updateMany(tuples)
 
+    val lastNewVersion = tuples.last._6
     val insertNewVersion = sql"""
         INSERT INTO streams(stream_id, version)
-        VALUES ($id, $newVersion)
+        VALUES ($id, ${lastNewVersion})
+        ON CONFLICT (stream_id) DO UPDATE 
+        SET version = ${lastNewVersion}
     """.update.run
 
     for {

@@ -15,7 +15,7 @@ case class CustomEnum(
     description: String,
     choices: NonEmptyList[String],
     enumType: EnumType,
-    deleted: Boolean = false
+    deleted: Boolean
 )
 
 object CustomEnum {
@@ -45,7 +45,8 @@ object CustomEnum {
   ) extends CustomEnumEventPayload
   case class CustomEnumChoicesAdded(choices: NonEmptyList[String])
       extends CustomEnumEventPayload
-  case class CustomEnumDeleted() extends CustomEnumEventPayload
+  case class CustomEnumDeleted(deleteReason: String)
+      extends CustomEnumEventPayload
   case class CustomEnumPinned(datasetId: DatasetId, value: String)
       extends CustomEnumEventPayload
   case class CustomEnumUnpinned(datasetId: DatasetId)
@@ -55,7 +56,7 @@ object CustomEnum {
     Encoder.instance {
       case created @ CustomEnumCreated(_, _, _, _)  => created.asJson
       case choicesAdded @ CustomEnumChoicesAdded(_) => choicesAdded.asJson
-      case deleted @ CustomEnumDeleted()            => deleted.asJson
+      case deleted @ CustomEnumDeleted(_)           => deleted.asJson
       case pinned @ CustomEnumPinned(_, _)          => pinned.asJson
       case unpinned @ CustomEnumUnpinned(_)         => unpinned.asJson
     }

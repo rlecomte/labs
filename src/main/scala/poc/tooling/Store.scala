@@ -24,7 +24,7 @@ trait Store[F[_]] {
   def register[A](
       id: AggregateId,
       version: Option[Version],
-      events: List[NewEvent[A]]
+      events: NonEmptyList[NewEvent[A]]
   )(implicit
       encoder: Encoder[A]
   ): F[Boolean]
@@ -61,7 +61,7 @@ object Store {
       override def register[A](
           id: AggregateId,
           version: Option[Version],
-          events: List[NewEvent[A]]
+          events: NonEmptyList[NewEvent[A]]
       )(implicit encoder: Encoder[A]): G[Boolean] = {
         fk(store.register[A](id, version, events))
       }
